@@ -2,6 +2,7 @@ using System.Diagnostics;
 
 namespace HaloLyrics;
 
+[System.Runtime.Versioning.SupportedOSPlatform("windows10.0.19041.0")]
 public sealed class MainForm : Form
 {
     private readonly Settings settings = LocalStore.LoadSettings();
@@ -18,6 +19,8 @@ public sealed class MainForm : Form
     private AppleLyricsClient? client;
     private PixelBar? bar;
     private Playback? playback;
+    private Playback? activeTrack;
+    private Process? authProcess;
     private SongLyrics? lyrics;
     private CancellationTokenSource? loading;
     private string? activeKey;
@@ -32,12 +35,13 @@ public sealed class MainForm : Form
     private int lyricChanges;
     private DateTime nextHeartbeat;
     private DateTime nextTempoCheck;
+    private DateTime nextPreview;
     private ScreenSnapshot? originalScreen;
     private string lastRestoreError = "";
 
     public MainForm()
     {
-        Text = "Apple Music 原词同步 · Halo PixelBar";
+        Text = "Apple Music 原词同步 1.1 · Halo PixelBar";
         Size = new(900, 560);
         MinimumSize = new(800, 500);
         StartPosition = FormStartPosition.CenterScreen;
@@ -97,7 +101,7 @@ public sealed class MainForm : Form
     {
         if (IsHandleCreated && !IsDisposed) Invoke(StopSync);
     }
-    private void ShowWindow() { Show(); WindowState = FormWindowState.Normal; Activate(); }
+    private void ShowWindow() { Show(); WindowState = FormWindowState.Normal; nextPreview = DateTime.MinValue; Activate(); }
     private void SetStatus(string text)
     {
         if (status.Text != text) LocalStore.Log(text);
@@ -112,18 +116,29 @@ public sealed class MainForm : Form
             source = "Apple Music", lyricLines = lyrics?.Lines.Count ?? 0, lyricChanges, started, observedAt = DateTimeOffset.Now
             , offsetMilliseconds = settings.OffsetMilliseconds, playing = playback?.Playing
             , animationPreset = settings.AnimationPreset, interludeAnimation = settings.InterludeAnimation, screenMode = sent == "\0rhythm" ? "rhythm" : "lyrics"
+            , metadataReads = media.MetadataReads, stateReads = media.StateReads, sessionScans = media.SessionScans
         }));
     }
     private async Task LoginAsync()
     {
         if (loginOpen) return;
         loginOpen = true;
+        timer.Stop();
         StopSync();
         try
         {
-            using var form = new AuthProbeForm();
-            form.ShowDialog(this);
-            var credentials = form.Credentials ?? LocalStore.LoadCredentials();
+            var executable = Environment.ProcessPath ?? throw new InvalidOperationException("无法定位登录程序。");
+            var info = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true };
+            if (Path.GetFileNameWithoutExtension(executable).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+                info.ArgumentList.Add(Path.GetFullPath(Environment.GetCommandLineArgs()[0]));
+            info.ArgumentList.Add("--authorize");
+            using var process = Process.Start(info) ?? throw new InvalidOperationException("无法打开 Apple 登录窗口。");
+            authProcess = process;
+            SetStatus("请在独立的 Apple 官方登录窗口完成授权。");
+            await process.WaitForExitAsync();
+            if (exiting || IsDisposed || Disposing) return;
+            if (process.ExitCode != 0) { SetStatus("尚未完成 Apple 登录。"); return; }
+            var credentials = LocalStore.LoadCredentials();
             if (credentials is not null)
             {
                 client?.Dispose(); client = new(credentials);
@@ -133,7 +148,11 @@ public sealed class MainForm : Form
             else SetStatus("尚未完成 Apple 登录。");
         }
         catch (Exception e) { SetStatus(SafeError(e)); }
-        finally { loginOpen = false; }
+        finally
+        {
+            authProcess = null; loginOpen = false;
+            if (!exiting && !IsDisposed && !Disposing) { timer.Interval = 1000; timer.Start(); }
+        }
     }
     private static bool TempoHubRunning()
     {
@@ -157,6 +176,7 @@ public sealed class MainForm : Form
             bar.UseSnapshot(originalScreen);
             LocalStore.SaveScreen(originalScreen);
             running = true; activeKey = null; sent = null;
+            timer.Interval = 100;
             SetStatus("已连接 A160；正在读取 Apple Music。");
         }
         catch (Exception e) { bar?.Dispose(); bar = null; SetStatus(SafeError(e)); }
@@ -188,7 +208,11 @@ public sealed class MainForm : Form
             playback = await media.ReadAsync();
             mediaErrors = 0;
             if (DateTime.UtcNow >= nextHeartbeat) { SaveStatus(); nextHeartbeat = DateTime.UtcNow.AddSeconds(1); }
-            trackLabel.Text = playback is null ? "未检测到 Apple Music 播放会话" : $"{playback.Title} — {playback.Artist}　{TimeSpan.FromSeconds(playback.Position):m\\:ss} / {TimeSpan.FromSeconds(playback.Duration):m\\:ss}";
+            if (Visible && WindowState != FormWindowState.Minimized && DateTime.UtcNow >= nextPreview)
+            {
+                trackLabel.Text = playback is null ? "未检测到 Apple Music 播放会话" : $"{playback.Title} — {playback.Artist}　{TimeSpan.FromSeconds(playback.Position):m\\:ss} / {TimeSpan.FromSeconds(playback.Duration):m\\:ss}";
+                nextPreview = DateTime.UtcNow.AddSeconds(1);
+            }
             if (!running) return;
             if (DateTime.UtcNow >= nextTempoCheck)
             {
@@ -212,9 +236,9 @@ public sealed class MainForm : Form
                 lyricLabel.Text = "等待 Apple Music 播放";
                 return;
             }
-            if (activeKey != playback.Key)
+            if (activeKey is null || !playback.SameTrack(activeTrack))
             {
-                activeKey = playback.Key; lyrics = null; loading?.Cancel();
+                activeKey = playback.Key; activeTrack = playback; lyrics = null; loading?.Cancel();
                 loading?.Dispose(); loading = new();
                 if (sent is not null) RestoreScreen();
                 lyricLabel.Text = "正在获取苹果原词……";
@@ -227,7 +251,7 @@ public sealed class MainForm : Form
             if (++mediaErrors >= 3) { lyrics = null; if (sent is not null) RestoreScreen(); }
             SetStatus(SafeError(e));
         }
-        finally { polling = false; }
+        finally { polling = false; timer.Interval = running ? (playback?.Playing == true ? 100 : 250) : 1000; }
     }
     private async Task LoadSongAsync(Playback track, CancellationToken token)
     {
@@ -307,7 +331,9 @@ public sealed class MainForm : Form
     private void OnClosing(object? sender, FormClosingEventArgs e)
     {
         if (!exiting && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); return; }
-        timer.Stop(); StopSync(); client?.Dispose(); tray.Visible = false; tray.Dispose();
+        timer.Stop();
+        if (authProcess is { HasExited: false }) authProcess.CloseMainWindow();
+        StopSync(); media.Dispose(); client?.Dispose(); tray.Visible = false; tray.Dispose();
         Microsoft.Win32.SystemEvents.SessionEnding -= OnSessionEnding;
         LocalStore.Log($"程序退出；本次更新歌词 {lyricChanges} 次。");
     }

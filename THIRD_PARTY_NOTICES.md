@@ -4,6 +4,8 @@ The application uses these NuGet packages under their respective licenses:
 
 - HidSharp 2.6.4 — https://www.nuget.org/packages/HidSharp/2.6.4
 - Microsoft.Web.WebView2 1.0.4258.31 — https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4258.31
+- Microsoft.Windows.CsWinRT 2.3.1 (MIT): embedded runtime support and the generated media projection — https://github.com/microsoft/CsWinRT
+- Microsoft.Windows.SDK.Contracts 10.0.19041.1: build-only metadata; not redistributed with the app — https://www.nuget.org/packages/Microsoft.Windows.SDK.Contracts/10.0.19041.1
 - Microsoft .NET 10 runtime and Windows desktop runtime — https://github.com/dotnet/runtime and https://github.com/dotnet/winforms
 
 The wire format was compared with these independent public implementations, then checked against the user's A160 hardware. No vendor binaries or decompiled vendor code are included in the release:

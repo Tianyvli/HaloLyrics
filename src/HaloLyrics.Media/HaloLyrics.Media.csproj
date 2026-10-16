@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.1.0</Version>
+    <!-- Older embedded support sources produce these compiler warnings on .NET 10. -->
+    <NoWarn>$(NoWarn);CS9191;CS0618</NoWarn>
+    <CsWinRTEmbedded>true</CsWinRTEmbedded>
+    <CsWinRTGeneratedFilesDir>obj\$(Configuration)\$(TargetFramework)\Projection\</CsWinRTGeneratedFilesDir>
+    <ProjectionMetadataPath Condition="'$(ProjectionMetadataPath)' == ''">$(LocalAppData)\HaloLyrics.Build\Metadata\10.0.19041.1</ProjectionMetadataPath>
+    <CsWinRTWindowsMetadata>"$(ProjectionMetadataPath)"</CsWinRTWindowsMetadata>
+    <CsWinRTIncludes>Windows.Media.Control;Windows.Foundation.IAsync;Windows.Foundation.Async;Windows.Foundation.TypedEventHandler;Windows.Foundation.FoundationContract;Windows.Foundation.UniversalApiContract;Windows.Foundation.Metadata;Windows.Foundation.Collections;Windows.Storage.Streams.IRandomAccessStream;Windows.Storage.Streams.IInputStream;Windows.Storage.Streams.IOutputStream;Windows.Storage.Streams.IBuffer;Windows.Storage.Streams.IContentTypeProvider;Windows.Storage.Streams.InputStreamOptions;Windows.Media.MediaPlaybackType;Windows.Media.MediaPlaybackAutoRepeatMode</CsWinRTIncludes>
+    <CsWinRTExcludes>Windows;Microsoft;Windows.Storage.Streams.IBufferFactory;Windows.Storage.Streams.IBufferStatics;Windows.Storage.Streams.IRandomAccessStreamReferenceStatics</CsWinRTExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.3.1" PrivateAssets="all" ExcludeAssets="compile;runtime" />
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.19041.1" PrivateAssets="all" ExcludeAssets="all" GeneratePathProperty="true" />
+  </ItemGroup>
+  <Target Name="PrepareProjectionMetadata" BeforeTargets="CsWinRTGenerateProjection">
+    <!-- cswinrt's metadata reader needs an ASCII path; the source tree may use Chinese names. -->
+    <MakeDir Directories="$(ProjectionMetadataPath)" />
+    <ItemGroup>
+      <ProjectionMetadata Include="$(PkgMicrosoft_Windows_SDK_Contracts)\ref\netstandard2.0\Windows.Foundation.FoundationContract.winmd;$(PkgMicrosoft_Windows_SDK_Contracts)\ref\netstandard2.0\Windows.Foundation.UniversalApiContract.winmd" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ProjectionMetadata)" DestinationFolder="$(ProjectionMetadataPath)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

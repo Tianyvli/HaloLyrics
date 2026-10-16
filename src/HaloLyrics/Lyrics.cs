@@ -5,7 +5,25 @@ using System.Xml.Linq;
 
 namespace HaloLyrics;
 
-public record LyricLine(double Begin, double End, string Text);
+public sealed record LyricLine(double Begin, double End, string Text)
+{
+    public bool Equals(LyricLine? other) => other is not null && Begin == other.Begin && End == other.End && Text == other.Text;
+    public override int GetHashCode() => HashCode.Combine(Begin, End, Text);
+    private string? segmentedText;
+    private List<string>? segments;
+    internal List<string> Segments
+    {
+        get
+        {
+            if (segments is null || segmentedText != Text)
+            {
+                segments = TextSegments.Split(Text);
+                segmentedText = Text;
+            }
+            return segments;
+        }
+    }
+}
 
 public static class Lyrics
 {

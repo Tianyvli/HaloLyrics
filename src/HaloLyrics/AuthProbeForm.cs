@@ -13,9 +13,11 @@ public sealed class AuthProbeForm : Form
     private string? userToken;
     private bool testing;
     private readonly CancellationTokenSource lifetime = new();
+    private readonly bool authorizationOnly;
     public AppleCredentials? Credentials { get; private set; }
-    public AuthProbeForm()
+    public AuthProbeForm(bool authorizationOnly = false)
     {
+        this.authorizationOnly = authorizationOnly;
         Text = "Apple Music 原词同步 · 验证登录";
         Size = new(1100, 820);
         Controls.Add(web); Controls.Add(status);
@@ -92,8 +94,9 @@ public sealed class AuthProbeForm : Form
             storefrontResponse.EnsureSuccessStatusCode();
             Credentials = new(bearer!, userToken!);
             LocalStore.SaveCredentials(Credentials);
-            if (Owner is not null) { SetStatus("Apple 登录成功。"); BeginInvoke(Close); return; }
-            var playback = await new MediaReader().ReadAsync();
+            if (Owner is not null || authorizationOnly) { SetStatus("Apple 登录成功。"); BeginInvoke(Close); return; }
+            using var mediaReader = new MediaReader();
+            var playback = await mediaReader.ReadAsync();
             if (playback is null) { SetStatus("Apple 登录成功；打开原生 Apple Music 后即可同步。"); return; }
             using var storefrontJson = JsonDocument.Parse(await storefrontResponse.Content.ReadAsStringAsync());
             var storefront = storefrontJson.RootElement.GetProperty("data")[0].GetProperty("id").GetString();

@@ -13,7 +13,7 @@ internal static class Program
         {
             if (args.Contains("--probe-media") || args.Contains("--probe-media-fast"))
             {
-                var reader = new MediaReader();
+                using var reader = new MediaReader();
                 var fast = args.Contains("--probe-media-fast");
                 for (var i = 0; i < (fast ? 100 : 10); i++)
                 {
@@ -93,9 +93,15 @@ internal static class Program
                 return 0;
             }
             ApplicationConfiguration.Initialize();
+            if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
+            {
+                MessageBox.Show("需要 Windows 10 2004 或更新版本。", "Apple Music 原词同步"); return 1;
+            }
+            if (args.Contains("--authorize") || args.Contains("--login"))
+                return RunLogin(args.Contains("--authorize"));
             using var instance = new Mutex(true, "Local\\HaloLyrics.App", out var firstInstance);
             if (!firstInstance) { MessageBox.Show("歌词同步工具已经在运行，请双击系统托盘图标。", "Apple Music 原词同步"); return 0; }
-            Application.Run(args.Contains("--login") ? new AuthProbeForm() : new MainForm());
+            Application.Run(new MainForm());
             return 0;
         }
         catch (Exception e)
@@ -103,5 +109,12 @@ internal static class Program
             Console.Error.WriteLine(e.GetType().Name + ": " + e.Message);
             return 1;
         }
+    }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static int RunLogin(bool authorizationOnly)
+    {
+        using var form = new AuthProbeForm(authorizationOnly);
+        Application.Run(form);
+        return form.Credentials is null ? 1 : 0;
     }
 }

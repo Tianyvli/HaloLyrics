@@ -1,11 +1,11 @@
-# Apple Music 原词同步 · Halo PixelBar
+# Apple Music 原词同步 1.1 · Halo PixelBar
 
 为 Windows 原生 Apple Music 和花再 Halo PixelBar A160 编写的本地托盘工具。音乐仍由 Apple Music 播放；工具从你的 Apple Music 订阅获取苹果原始歌词和时间轴，通过 USB 更新音响屏幕。Apple Music 和本工具均可最小化。
 
 ## 使用
 
-1. 双击项目目录的 `启动歌词同步.cmd`，或运行 `dist\HaloLyrics\HaloLyrics.exe`。发布版本自带 .NET 运行时，无需安装 SDK。
-2. 第一次使用时，在程序打开的 Apple 官方页面完成登录。登录成功会返回主窗口。
+1. 双击项目目录的 `启动歌词同步.cmd`，或运行 `dist\HaloLyrics\HaloLyrics.exe`。1.1 默认使用已安装的 **.NET 10 Desktop Runtime x64**，本机已具备，无需安装 SDK。登录还使用本机的 WebView2 Runtime。迁移到没有 .NET 的电脑时可使用自带运行时的独立包。
+2. 第一次使用时，在程序单独打开的 Apple 官方窗口完成登录。成功后登录进程退出，主窗口继续同步；平时不会后台保留登录浏览器。1.0 的登录、曲目映射和动画设置直接沿用。
 3. 从系统托盘退出 **EDIFIER TempoHub**，保留其安装和 Windows 音频驱动。两个控制程序同时运行会争抢屏幕。
 4. 在原生 Apple Music 中播放歌曲，点击本工具的 **开始同步**。曲目存在多个版本时，选择与实际录音对应的版本；程序会记住选择。
 5. 歌词偏晚时增大 **歌词提前（毫秒）**，偏早时减小；正数提前、负数延后，按 50 毫秒调整。设置自动保存。本机已校准过的设置会继续保留。
@@ -44,5 +44,11 @@
 ```
 
 脚本优先使用项目的 `.tools\dotnet`，否则使用系统 SDK。运行 `tools\Build.ps1 -TestOnly` 只执行自动检查。源码位于 `src\HaloLyrics`，自动检查位于 `tests\HaloLyrics.Tests`。
+
+默认打包为使用共享运行时的精简程序。`tools\Build.ps1 -Standalone` 生成自带运行时的独立包，位于 `dist\HaloLyrics-standalone`；`-OutputDirectory` 可指定另一输出目录。发布文件不使用整套 Windows SDK 投影，也不附带 XML 开发文档。
+
+`src\HaloLyrics.Media` 用微软 C#/WinRT 仅生成媒体会话需要的接口。构建会把固定版本的两份 SDK 元数据复制到 `%LOCALAPPDATA%\HaloLyrics.Build`，避开工具对中文路径的限制；这些仅是开发文件，不随程序分发。如果用户资料路径也含中文，可在构建时传入 `-p:ProjectionMetadataPath=<可写的英文路径>`。
+
+1.1 使用媒体变化事件、短周期状态读取及进度外推，保留播放中的 100 毫秒显示检查；读取后立即释放临时媒体快照。歌词只分段一次，隐藏窗口时不刷新进度标签，暂停或未开始同步时降低轮询频率。程序不清空 Windows 工作集，也不定时强制垃圾回收。
 
 这是独立的本地辅助工具，不隶属于 Apple 或漫步者。

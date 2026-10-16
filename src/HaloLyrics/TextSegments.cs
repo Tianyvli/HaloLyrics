@@ -7,6 +7,8 @@ public static class TextSegments
 {
     public static List<string> Split(string text)
     {
+        if (text.Length == 0) return [];
+        if (text.Length <= 16 && Encoding.UTF8.GetByteCount(text) <= 48) return [text];
         var result = new List<string>();
         var builder = new StringBuilder();
         var enumerator = StringInfo.GetTextElementEnumerator(text);
@@ -29,7 +31,7 @@ public static class TextSegments
     }
     public static string At(LyricLine line, double position)
     {
-        var segments = Split(line.Text);
+        var segments = line.Segments;
         if (segments.Count == 0) return "";
         var fraction = Math.Clamp((position - line.Begin) / (line.End - line.Begin), 0, 0.999999);
         return segments[(int)(fraction * segments.Count)];

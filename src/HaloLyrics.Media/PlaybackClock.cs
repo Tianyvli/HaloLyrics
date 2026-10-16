@@ -1,3 +1,4 @@
+#nullable enable
 namespace HaloLyrics;
 
 /// <summary>Rejects subsecond SMTC timestamp jitter without hiding real seeks or pauses.</summary>
@@ -7,7 +8,7 @@ public sealed class PlaybackClock
     public Playback Apply(Playback current)
     {
         var position = current.Position;
-        if (previous is not null && previous.Key == current.Key && previous.Playing && current.Playing)
+        if (previous is not null && previous.SameTrack(current) && previous.Playing && current.Playing)
         {
             var elapsed = Math.Max(0, (current.ObservedAt - previous.ObservedAt).TotalSeconds);
             var predicted = previous.Position + elapsed;

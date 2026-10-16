@@ -46,6 +46,10 @@ Check(TextSegments.Current(fixture,0) is null && TextSegments.Current(fixture,3)
 Check(TextSegments.Current(fixture,6)?.Text == "second" && TextSegments.Current(fixture,2)?.Text == "first", "Seeking backward does not retain a stale lyric");
 var adjacent = new List<LyricLine>{new(1,3,"first"),new(3.2,5,"second")};
 Check(TextSegments.Current(adjacent,3.1)?.Text == "first" && TextSegments.Current(adjacent,3.2)?.Text == "second", "Short vocal gaps do not flash a blank frame");
+var cachedLine = new LyricLine(1, 5, "原詞");
+var originalHash = cachedLine.GetHashCode();
+Check(TextSegments.At(cachedLine, 2) == "原詞" && TextSegments.At(cachedLine with { Text = "新詞" }, 2) == "新詞", "Cached segmentation cannot retain replaced lyric text");
+Check(cachedLine == new LyricLine(1, 5, "原詞") && cachedLine.GetHashCode() == originalHash, "Rendering caches preserve lyric equality and hash codes");
 Check(Interlude.ShouldAnimate(fixture,4,10,true,3) == false, "Short gaps do not activate the rhythm scene");
 var longGap=new List<LyricLine>{new(8,12,"first"),new(22,25,"second")};
 Check(Interlude.ShouldAnimate(longGap,2,30,true,5), "Long prelude activates rhythm scene");
@@ -55,6 +59,9 @@ Check(!Interlude.ShouldAnimate(longGap,15,30,false,5), "Paused playback stops in
 Check(!Interlude.ShouldAnimate([],15,30,true,5), "Missing lyrics do not masquerade as a known interlude");
 Check(PixelBar.ParseTextState([14,80,50,0],PixelBar.LyricSource).SequenceEqual(new byte[]{14,0}), "Native lyric buffer can be restored independently of custom text");
 var track = new Playback("Song", "Artist", "Album", 200, 0, true, "AppleMusic", DateTimeOffset.UtcNow);
+Check(track.SameTrack(track with { Position = 50, Playing = false }), "Position and pause changes preserve song identity");
+Check(!track.SameTrack(track with { Album = "Other" }) && !track.SameTrack(track with { Duration = 210 }), "Album and duration changes invalidate song identity");
+Check(!Interlude.ShouldAnimate(longGap, 27, 30, true, 8) && Interlude.ShouldAnimate(longGap, 27, 30, true, 5), "Outro respects the configurable interlude threshold");
 Check(AppleLyricsClient.ExactMatch(track,new("1","Song","Artist","Album",200.2,true)), "Exact recording metadata matches");
 Check(!AppleLyricsClient.ExactMatch(track,new("1","Song","Artist","Live Album",200.2,true)), "Different album requires explicit confirmation");
 Check(!AppleLyricsClient.ExactMatch(track,new("1","Song","Artist","Album",210,true)), "Different duration requires explicit confirmation");
@@ -78,6 +85,19 @@ using(var api=new AppleLyricsClient(new("Bearer test-only","test-only"),new Fake
     using var cancellation=new CancellationTokenSource(); cancellation.Cancel();
     try { await api.InitializeAsync(cancellation.Token); throw new Exception("Cancellation ignored"); }
     catch(OperationCanceledException){Check(true,"Cancelled lyric requests do not complete");}
+}
+if (args.Contains("--benchmark"))
+{
+    var sample = new LyricLine(1, 10, "這是一段需要完整顯示的原始歌詞 with an English phrase and e\u0301 🌸");
+    var sampleLines = new List<LyricLine> { sample, new(20, 25, "next") };
+    for (var i = 0; i < 1000; i++) { _ = TextSegments.At(sample, 5); _ = Interlude.ShouldAnimate(sampleLines, 15, 30, true, 5); }
+    var allocated = GC.GetAllocatedBytesForCurrentThread();
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    for (var i = 0; i < 10000; i++) { _ = TextSegments.At(sample, 5); _ = Interlude.ShouldAnimate(sampleLines, 15, 30, true, 5); }
+    var allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocated;
+    Console.WriteLine(JsonSerializer.Serialize(new { benchmark = "render", iterations = 10000,
+        allocatedBytes, milliseconds = watch.Elapsed.TotalMilliseconds }));
+    Check(allocatedBytes < 1024, "Repeated lyric rendering and interlude checks stay below 1 KB allocation per 10000 frames");
 }
 Console.WriteLine($"{count} checks passed.");
 
