@@ -1,0 +1,8 @@
+.tools/
+**/bin/
+**/obj/
+dist/
+artifacts/
+.vs/
+# Local protocol research; not part of the application source.
+tools/inspect_controller.py
